@@ -497,6 +497,11 @@ footer .footer-custom-content {
   color: #9B26B6;
 }
 
+.post-preview a:hover h2.post-title {
+  color: #9B26B6;
+  text-decoration: underline;
+}
+  
 .post-preview a:hover h3.post-subtitle {
   color: #7E609D;
   text-decoration: underline;
@@ -829,13 +834,13 @@ nav.top-nav-short-permanent ~ header > .intro-header.big-img {
 }
 
 .pagination .page-item .page-link {
-  font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-family: 'Times New Roman', serif;
   text-transform: uppercase;
   font-size: 0.875rem;
   font-weight: 800;
   letter-spacing: 1px;
   padding: 0.625rem 0.3125rem;
-  background-color: #FFF;
+  background-color: #EEE;
   border-radius: 0;
   color: {{ site.text-col | default: "#404040" }};
   padding: 0.75rem 1rem;

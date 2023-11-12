@@ -104,7 +104,8 @@ hr.small {
 ::selection {
   color: #fff;
   text-shadow: none;
-  background-color: {{ site.hover-col | default: "#0085A1" }};
+  /*background-color: {{ site.hover-col | default: "#0085A1" }};*/
+  color: #9B26B6;
 }
 img::selection {
   color: #fff;

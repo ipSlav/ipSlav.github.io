@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Whoami
+title: About me
 subtitle: I'm just a guy obsessed with understanding how things work
 ---
 

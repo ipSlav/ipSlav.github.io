@@ -33,6 +33,7 @@ p {
   margin: 1.875rem 0;
   /*font-family: 'Lora', 'Times New Roman', serif;*/
   font-size: 1.25rem;
+  text-align: justify;
 }
 h2,h3,h4,h5,h6 {
   /*font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;*/

@@ -9,12 +9,12 @@ tags: [red teaming, security research]
 ## Introduction
 As EDR are becoming more and more sophisticated and difficult to bypass, the opportunity to blend-in within legitimate application behavior appears to be an interesting vector to remain undetected.
 This research started a couple of years back during my initial days of trying to bypass EDRs (without really understanding how and why things were working in a certain way) after stumbling upon a [@MrUn1k0d3r](https://twitter.com/MrUn1k0d3r) episode on which he explained a really cool .NET appdomain trick.
-By leveraging some other previous research and PoCs and standing on the shoulder of giants I've come up with an extra cool fashion way to backdoor and abuse .NET Framework applications and created [DirtyCLR](https://github.com/ipSlav/DirtyCLR), a managed DLL on steroids that can execute a shellcode with a clean thread call stack and without directly calling any Windows API.
+By leveraging some previous existing researches and PoCs and standing on the shoulder of giants I've come up with an extra cool fashion way to backdoor and abuse .NET Framework applications and created [DirtyCLR](https://github.com/ipSlav/DirtyCLR), a managed DLL on steroids that can execute a shellcode with a clean thread call stack and without directly calling any Windows API.
 
 ## App Domain Manager Injection
 To backdoor .NET Framework applications we’re going to abuse a very well-known technique: `App Domain Manager Injection`.
-This technique, initially discovered by Casey Smith (aka subTee) in 2017, allows to inject a custom ApplicationDomain that will execute arbitrary code inside the target application process.
-Despite his original PoC, called GhostLoader, has been deleted you can still find it in GitHub thanks to a fork published by [TheWover](https://github.com/TheWover/GhostLoader).
+This technique, initially discovered by Casey Smith (aka subTee) in 2017, allows to inject a custom [ApplicationDomain](https://learn.microsoft.com/en-us/dotnet/framework/app-domains/application-domains) that will execute arbitrary code inside the target application process.
+Despite his original PoC has been deleted you can still find it in GitHub thanks to a fork published by [TheWover](https://github.com/TheWover/GhostLoader).
 Without having to dive too much into the details (if you’ve never heard of such technique go check out [NetbiosX](https://pentestlaboratories.com/2020/05/26/appdomainmanager-injection-and-detection/) and [Rapid7](https://www.rapid7.com/blog/post/2023/05/05/appdomain-manager-injection-new-techniques-for-red-teams/) blogposts), what we are interested in is the possibility to trigger any .NET Framework application to load an arbitrary managed DLL located on disk or remotely in a website.
 
 An extremely simplified DLL to be used as a PoC could be written as follows:
@@ -33,8 +33,8 @@ public sealed class MyAppDomain : AppDomainManager
 }
 ```
 
-The two main values that we’re most interested in are the `MyAppDomain` extended class and the C# filename (e.g. `AppDomInject.cs`) as those values will be respectively used as `appDomainManagerType` and `appDomainManagerAssembly` in our trigger methods.<br>
-Talking about trigger methods to elicit our target .NET Framework application to load our arbitrary managed DLL we can abuse two of those:
+The two main values that we’re most interested in are the `MyAppDomain` extended class and the C# filename (e.g. `AppDomInject.cs`) as those values will be respectively used into the `appDomainManagerType` and `appDomainManagerAssembly` tags/variables in our trigger methods.<br>
+Talking about trigger methods, to elicit our target .NET Framework application to load our arbitrary managed DLL we can abuse two of those:
 - Using a `.config` XLM file
 - Setting up some enviromental variables
 
@@ -79,15 +79,15 @@ While doing this research I’ve also discovered a third trigger method that cou
 These files are special `.config` XML files residing in the `Config` subdirectory of the root directory where the runtime is installed (e.g.; `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\Config`) and contains settings that apply to an entire computer. That means that by simply modifying the `<runtime />` tag within a `machine.config` file, with the same content of our `.config` XML file trigger method, we can force any .NET Framework application installed on the system to load our arbitrary DLL at startup.
 
 {: .box-note}
-Keep in mind that backdooring applications via `machine.config` files will execute multiple shellcode.
+Keep in mind that backdooring applications via `machine.config` files will execute multiple shellcodes.
 To avoid this behavior you would need to use some kind of guardrail (e.g; [a mutex](https://github.com/ipSlav/DirtyCLR/blob/master/DirtyCLR/DirtyCLR.cs#L155)).
 
 ## Understanding .NET Memory Artifact
-To better understand what could be the main advantages of backdooring .NET Framework applications and abusing legitimate .NET functionalities and behaviors we first need to understand the difference between a legitimate memory artifacts within the Windows OS and  the ones generated by .NET and JIT processes. If you want to deep dive on the argument a great explanation of those differences can be found on the three-part blog post series [Masking Malicious Memory Artifacts](https://www.forrest-orr.net/post/malicious-memory-artifacts-part-i-dll-hollowing) written by [Forrest Orr](https://twitter.com/_ForrestOrr). For the sake of this research the main point of interest is related to private memory region, which is a specific memory category in Windows related to memory allocated on the `Stack` or dynamically on the `Heap`, hence allocated with `NtAllocateVirtualMemory`.
+To better understand what could be the main advantages of backdooring .NET Framework applications and abusing legitimate .NET functionalities and behaviors we first need to understand the difference between a legitimate memory artifacts within the Windows OS and  the ones generated by .NET and JIT processes. If you want to deep dive on the argument a great explanation of those differences can be found on the three-part blog post series [Masking Malicious Memory Artifacts](https://www.forrest-orr.net/post/malicious-memory-artifacts-part-i-dll-hollowing) written by [Forrest Orr](https://twitter.com/_ForrestOrr). For the sake of this research the main point of interest is related to memory regions categorized as `private`, which is a specific memory category in Windows related to memory allocated on the `Stack` or dynamically on the `Heap`, hence allocated with `NtAllocateVirtualMemory`.
 
 If you’re familiar with dynamically allocated memory you should know that those memory regions are normally allocated as `Read-Write (RW)` by modern Operating Systems. On the other hand, JIT processes tends to allocate and use a lot of dynamically allocated memory on the `Heap`, normally managed by `Garbage Collectors`, but with `Read-Write-Execute (RWX)` protection flags. This gives a great opportunity to attackers to blend-in within those process memory region space and potentially fly undetected by memory scanners, by masquerading themselves within False-Positives or even being filtered out by some of those.
 
-An example of this behavior can be seen in `Figure 1` while scanning a benign .NET Framework application with [Moneta](https://github.com/forrest-orr/moneta), returning a lot of memory IoC including, among others, several `abnormal private exutable memory regions`. As specified by Forrest all of those IoC are in fact False-Positives generate by the `Common Language Runtime (CLR)`, which tends to allocate big chunks of `RWX` memory regions both during its initialization phase and on runtime. To filters out all of those IoC Forrest implemented the `clr-heap` and `clr-prvx` flags, which you can see in action on the bottom part of the same image, showing no memory IoC on the same benign `SimpleDotNet.exe` application.
+An example of this behavior can be seen in `Figure 1` while scanning a benign .NET Framework application with [Moneta](https://github.com/forrest-orr/moneta), returning a lot of memory IoC including, among others, several `abnormal private exutable memory regions`. As specified by Forrest all of those IoCs are in fact False-Positives generate by the `Common Language Runtime (CLR)`, which tends to allocate big chunks of `RWX` memory regions both during its initialization phase and on runtime. To filters out all of those IoCs Forrest implemented the `clr-heap` and `clr-prvx` flags, which you can see in action on the bottom part of the same image, showing no memory IoC on the same benign `SimpleDotNet.exe` application.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/moneta-benign.png">
@@ -99,12 +99,12 @@ Another great example of how difficult appears to obtain actual True-Positives w
 
 ## Using Unsafe Gadgets
 At the moment we can only backdoor .NET Framework applications, blending within their default behavior and traffic, and bypass some ETW events thanks to the `.config` file `<etwEnable>` element.
-As we’re interested on building up a managed DLL that flies under the radar we need to find also way to avoid calling any Windows API and potentially have a clean thread call stack to drastically lower the chances of getting caught.
+As we’re interested on building up a managed DLL that flies under the radar we need to find also a way to avoid calling any Windows API and potentially have a clean thread call stack to drastically lower the chances of getting caught.
 To partially solve the first problem we can leverage an old research called [Weird Ways to Run Unmanaged Code in .NET](https://blog.xpnsec.com/weird-ways-to-execute-dotnet/), written by Adam Chester ([@xpn](https://twitter.com/_xpn_)). By looking at [NautilusProject](https://github.com/xpn/NautilusProject) and his blogpost we can identify two very interesting and uncommon ways of leveraging .NET for offensive purposes:
 - Hijacking JIT Compilation
 - Using InternalCall and QCall gadgets
 
-Despite being both a very clever solution to execute some unmanaged code in .NET, we can’t just implement an Unmanaged DLL for App Domain Manager Injection using `NautilusProject` as-is. 
+Despite being both a very clever solution to execute some unmanaged code in .NET, we can’t just implement an Unmanaged DLL for `App Domain Manager Injection` using `NautilusProject` as-is. 
 This is mainly due to the following two issues that I have encountered while playing around with it:
 
 1. Despite the similarities between CoreCLR and the .NET Framework, `NautilusProject` has been mainly tested in `NET 5.0`. As we’re interested on having a DLL PoC for `App Domain Manager Injection` we can solely rely on the .NET Framework, as the [AppDomainManager](https://learn.microsoft.com/en-us/dotnet/api/system.appdomainmanager?view=netframework-4.8.1) class is not supported by any other .NET platform/version. Moreover, the hijack process targets some internal .NET structures, which is not ideal as those might, and have been, modified over time; Therefore, we might get unreliable results and/or crashes while using it in different platforms and versions. Fortunately enough, we can still use the [Read](https://gist.github.com/xpn/1ebb297ff364d28df048db4db4236258#file-readgadget-cs) and [Write](https://gist.github.com/xpn/ebd9497cb47be7e3828458a21a1636c3#file-writegadget-cs) gadgets along the [CopyMemory](https://gist.github.com/xpn/8486cea3e3f7d41c8a6db6d0baa5960a#file-dogfoodexec-cs-L44) wrapper function to avoid directly calling any Windows API when trying to read/write process memory.
@@ -112,17 +112,17 @@ This is mainly due to the following two issues that I have encountered while pla
    {: .box-note}
    Even though, for the sake of simplicity, I decided to reuse xpn `NautilusProject` gadgets it might be possible to abuse a different set of those, considering the amount present within [ecalllist.h](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/ecalllist.h).
 
-2. Even if xpn came out [with a solution](https://github.com/xpn/NautilusProject/blob/master/NautilusProject/ExecStubOverwriteWithoutPInvoke.cs) to use `VirtualAlloc` without any P/Invoke reference we don’t want to directly call any type of Windows API, especially if related to memory allocation routines. This is mainly due to two reasons: to better blend-in within the legitimate behavior of backdoored .NET Framework applications, which might not use any unmanaged API at all in the first place, and to let the CLR allocate the memory using its default behavior, hiding from memory scanners and avoid being caught from a memory IoC perspective, as explained by forrest-orr.<br>
+2. Even if xpn came out [with a solution](https://github.com/xpn/NautilusProject/blob/master/NautilusProject/ExecStubOverwriteWithoutPInvoke.cs) to use `VirtualAlloc` without any `P/Invoke` reference we don’t want to directly call any type of Windows API, especially if related to memory allocation routines. This is mainly due to two reasons: to better blend-in within the legitimate behavior of backdoored .NET Framework applications, which might not use any unmanaged API at all in the first place, and to let the CLR allocate the memory using its default behavior, hiding from memory scanners and avoid being caught from a memory IoC perspective, as explained by forrest-orr.<br>
 By examining `Figure 2`, we can also identify another IoC resulting from the use of memory allocated with `VirtualAlloc`: specifically, the presence of three unbacked memory regions at the start of the thread call stack during the execution of a `MessageBox` shellcode
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/nautilus-callstack.png">
 	<br>
-    <em>Figure 2 - Unbacked Memory Region on NautilusProject Thread Call Stack</em>
+    <em>Figure 2 - Unbacked memory region on NautilusProject thread call stack</em>
 </p>
 
 ## Double Delegate: Solving the JIT Hijack Problem
-While thinking about how to solve all those problems, luckily enough, I stumbled upon [this tweet](https://twitter.com/daem0nc0re/status/1698308879325766060) by @daem0nc0re showing that a buffer returned by [Marshal.GetFunctionPointerForDelegate](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.marshal.getfunctionpointerfordelegate?view=net-7.0) has `RWX` protection. To better understand why this is happening under the hood I started diving within a GitHub [CoreCLR codebase fork](https://github.com/dotnet/coreclr/forks), starting from the [function definition within the CLR](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/marshalnative.cpp#L408). As trying to make sense on all of it just by doing some easy and fast code review didn’t brought me any results, and led me to some [very weird disclaimers](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/inc/loaderheap.h#L162) written by developers, I decided to build a quick PoC called `delegatetest` and debug it with Windbg.
+While thinking about how to solve all those problems, luckily enough, I stumbled upon [this tweet](https://twitter.com/daem0nc0re/status/1698308879325766060) by [@daem0nc0re](https://twitter.com/daem0nc0re) showing that a buffer returned by [Marshal.GetFunctionPointerForDelegate](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.marshal.getfunctionpointerfordelegate?view=net-7.0) has `RWX` protection. To better understand why this is happening under the hood I started diving within a GitHub [CoreCLR codebase fork](https://github.com/dotnet/coreclr/forks), starting from the [function definition within the CLR](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/marshalnative.cpp#L408). As trying to make sense on all of it just by doing some easy and fast code review didn’t brought me any results, and led me to some [very weird disclaimers](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/inc/loaderheap.h#L162) written by developers, I decided to build a quick PoC called `delegatetest` and debug it with Windbg.
 
 ```csharp
 using System;
@@ -149,7 +149,7 @@ By looking at the thread call stack in `Figure 3` we can have a clue on what is 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/delegatetest-callstack.png">
 	<br>
-    <em>Figure 3 - delegatetest.exe Thread Call Stack</em>
+    <em>Figure 3 - delegatetest.exe thread call stack</em>
 </p>
 
 Analyzing `EEHeapAllocInProcessHeap` code clearly shows how the method calls [GetProcessHeap](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/hosting.cpp#L143) to get an handle to the `Default Process Heap`, a 1MB heap memory region allocated by the OS during a process initialization, and then allocates some memory via [HeapAlloc](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/hosting.cpp#L221). Another evidence of default process heap usage can be seen in `Figure 4` while analyzing the `delegatetest` process memory with [VMMap](https://learn.microsoft.com/bs-latn-ba/sysinternals/downloads/vmmap), observing a 8KB RWX buffer in Heap ID 0, the `Default Process Heap`.
@@ -179,10 +179,10 @@ I didn’t quite understand why the CLR decides to allocate RWX memory region on
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/delegatetest-rwxalloc.png">
 	<br>
-    <em>Figure 7 - Memory address within the same RWX Heap memory page</em>
+    <em>Figure 7 - Memory address within the same RWX heap memory page</em>
 </p>
 
-To execute a `MessageBox` shellcode using the RWX buffer returned by `GetFunctionPointerForDelegate` we can use a concept that I named, without too much imagination, `Double Delegate`: wrapping our function pointer with another delegate right after overwriting its memory.
+Having this understanding we can now try to execute a `MessageBox` shellcode using the RWX buffer returned by `GetFunctionPointerForDelegate`. To do this we can use a concept that I named, without too much imagination, `Double Delegate`: wrapping our function pointer with another delegate right after overwriting its memory.
 
 ```csharp
 using System;
@@ -218,13 +218,13 @@ namespace DelegateTest
 ```
 
 ## EmitAlloc: Solving the VirtualAlloc Problem
-So, how do we avoid to directly call `VirtualAlloc` and solve our second and last problem? Well, If we look again at @daem0nc0re tweet, [Dylan Tran](https://twitter.com/d_tranman) provides us [a very clever solution](https://gist.github.com/susMdT/2d13330f6a5bfa482555e22430c0eb82) for this, using the .NET [System.Reflection.Emit](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.emit?view=net-7.0) APIs to allocate an arbitrary amount of memory.
+So, how do we avoid to directly call `VirtualAlloc` and solve our second and last problem? Well, If we look again at daem0nc0re tweet, [Dylan Tran](https://twitter.com/d_tranman) provides us [a very clever solution](https://gist.github.com/susMdT/2d13330f6a5bfa482555e22430c0eb82) for this: using the .NET [System.Reflection.Emit](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.emit?view=net-7.0) APIs to allocate an arbitrary amount of memory.
 
 By looking at Dylan PoC we can see how this allows us to allocate an arbitrary amount of memory by repeateadly calling the [EmitWriteLine](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.emit.ilgenerator.emitwriteline?view=net-7.0) method iterating over a byte count and subtracting 18 bytes from it at every cycle.  This gives us a clue that, under the hood, what is happening is that the size of the dynamically generated method gets inflated by 18 bytes on every `EmitWriteLine` method call, leading the CLR to allocate all the needed memory for the method once [PrepareMethod](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.runtimehelpers.preparemethod?view=net-8.0) gets called.
-As I wanted to verify this and understand how this solution works under the hood, and be sure if I could actually use it within DirtyCLR, I compiled Dylan’s PoC and dive right into Windbg once again.
+As I wanted to understand how this solution works under the hood, and be sure if I could actually use it within DirtyCLR, I compiled Dylan’s PoC and dive right into Windbg once again.
 
-Mindful of the CLR memory allocation behavior observed during the `GetFunctionPointerForDelegate` CLR analysis I wanted to verify if a similar behavior was in fact taking place also here. By analyzing, in a very tedious way, every `NtAllocateVirtualMemory` API call occurring during the CLR initialization process and keeping track of the returned base address of the allocated memory region visible in the RDX registry I end up correlating one of those with the memory address returned by the `GenerateRWXMemory` function.
-If we look at `Figure 8` we can see a thread call stack containing three interesting frame indexes showing us how the CLR, during the `DefaultDomain` initialization process, creates a [CodeHeap](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/codeman.h#L409) , calls [ClrVirtualAllocExecutable](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/util.cpp#L458) and ends up calling `NtAllocateVirtualMemory`, returning the address `0x7FFEB33E0000` in little endian.
+Mindful of the CLR memory allocation behavior observed during the `GetFunctionPointerForDelegate` CLR analysis I wanted to verify if a similar behavior was in fact taking place also here. By analyzing, in a very tedious way, every `NtAllocateVirtualMemory` API call occurring during the CLR initialization process and keeping track of the returned base address of the allocated memory region visible in the `RDX` registry I end up correlating one of those with the memory address returned by the `GenerateRWXMemory` function.<br>
+To start, if we look at `Figure 8` we can see a thread call stack containing three interesting frame indexes showing us how the CLR, during the `DefaultDomain` initialization process, creates a [CodeHeap](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/codeman.h#L409) , calls [ClrVirtualAllocExecutable](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/util.cpp#L458) and ends up calling `NtAllocateVirtualMemory`, returning the address `0x7FFEB33E0000` in little endian.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/defaultdomain-rwxalloc.png">
@@ -247,10 +247,10 @@ Moving on with process execution, and reaching the `PrepareMethod` stage, we can
 </p>
 
 ## DirtyCLR: Blend Within the .NET Framework and Live Free
-Now that we have every piece of the puzzle we can put everything together and have [DirtyCLR](https://github.com/ipSlav/DirtyCLR) blend-in within the .NET Framework. `Figure 11` and `Figure 12` shows us a shellcode execution clean thread call stack of a backdoored [RDCMan](https://learn.microsoft.com/en-us/sysinternals/downloads/rdcman) inspected with `System Informer` (former `Process Hacker`).
+Now that we have every piece of the puzzle we can put everything together and blend-in within the .NET Framework using [DirtyCLR](https://github.com/ipSlav/DirtyCLR). `Figure 11` and `Figure 12` shows us a shellcode execution clean thread call stack of a backdoored [RDCMan](https://learn.microsoft.com/en-us/sysinternals/downloads/rdcman) inspected with `System Informer` (former `Process Hacker`).
 
 {: .box-note}
-Keep in mind that using `DirtyCLR` to execute a C2 shellcode might get you detected if your beacon Reflective Loader doesn’t take care of its own OPSEC, creating new identifiable IoCs.
+Keep in mind that using `DirtyCLR` to execute a C2 shellcode might get you detected if the beacon Reflective Loader doesn’t take care of its own OPSEC, creating new identifiable IoCs.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/backdoored-rdcman.png">
@@ -261,13 +261,13 @@ Keep in mind that using `DirtyCLR` to execute a C2 shellcode might get you detec
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/dirtyclr-messagebox.png">
 	<br>
-    <em>Figure 12 - DirtyCLR MessageBox shellcode execution with Clean Thread Call Stack</em>
+    <em>Figure 12 - DirtyCLR MessageBox shellcode execution with a clean thread call stack</em>
 </p>
 
 Let’s also see how `DirtyCLR` behaves against `Moneta`, `PE-sieve` and a top-tier EDR.
 
 ### Moneta
-`Figure 13` shows us no IoCs, setting up the anti-false-positive CLR filters, from the backdoored application. This is common behavior shared with a lot of .NET application but still allows us to perfectly blend-in within the CLR.
+`Figure 13` shows us no IoCs coming from the backdoored application, while setting up the anti-false-positive CLR filters. This is common behavior shared with a lot of .NET applications but still allows us to perfectly blend-in within the CLR.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/dirtyclr-moneta.png">
@@ -276,8 +276,8 @@ Let’s also see how `DirtyCLR` behaves against `Moneta`, `PE-sieve` and a top-t
 </p>
 
 ### PE-sieve
-Even though `PE-sieve` is capable of identifying suspicious behaviors, getting actionable response from a appears to be tricky and prone to errors, especially without a proper baseline of false-positives generate by non-backdoored, legitimate .NET Framework applications.
-To better articulate this lets have a look at `Figure 14` showing us two `Total suspicious` entries from a non-backdoored RDCMan and compares it with `Figure 15` containing a total of four entries. Even though we get two new entries, one being the actual `MessageBox` shellcode, a blue teamer might not further investigating the entries, considering the amount of false-positive generated by default by the CLR.
+Even though `PE-sieve` is capable of identifying suspicious behaviors, getting actionable response from it appears to be tricky and prone to errors, especially without a proper baseline of false-positives generate by non-backdoored, legitimate .NET Framework applications.
+To better articulate this lets have a look at `Figure 14` showing us two `Total suspicious` entries from a non-backdoored `RDCMan` and compares it with `Figure 15` containing a total of four entries. Even though we get two new entries, one being the actual `MessageBox` shellcode, a blue teamer might not further investigating these entries, considering the amount of false-positive generated by default by the CLR.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/pesieve-legit.png">
@@ -291,7 +291,7 @@ To better articulate this lets have a look at `Figure 14` showing us two `Total 
     <em>Figure 15 - PE-sieve scan on backdoored RDCMan.exe execution</em>
 </p>
 
-If we have a look at the `PE-sieve` scan reports we can see it might become pretty hard to distinguish between the legitimate execution, in `Figure 16`, from the backdoored present in `Figure 17` containing the first entry, being the actual `MessageBox` shellcode. Multiplies this for every .NET Framework application that might be used within an environment and the results of those scans might be easily overlooked.
+If we have a look at the `PE-sieve` scan reports we can see it might become pretty hard to distinguish between the legitimate execution, in `Figure 16`, from the backdoored one observable in `Figure 17` and containing the actual `MessageBox` shellcode as its first entry. Multiplies this for every .NET Framework application that might be used within an environment and the results of those scans might be easily overlooked.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/pesieve-legit-scan.png">

@@ -291,7 +291,7 @@ To better articulate this lets have a look at `Figure 14` showing us two `Total 
     <em>Figure 15 - PE-sieve scan on backdoored RDCMan.exe execution</em>
 </p>
 
-If we have a look at the `PE-sieve` scan reports we can see it might become pretty hard to distinguish between the legitimate execution, in `Figure 16`, from the backdoored one observable in `Figure 17` and containing the actual `MessageBox` shellcode as its first entry. Multiplies this for every .NET Framework application that might be used within an environment and the results of those scans might be easily overlooked.
+If we have a look at the `PE-sieve` scan reports we can see it might become pretty hard to distinguish between the legitimate execution, in `Figure 16`, from the backdoored one observable in `Figure 17` and containing the actual `MessageBox` shellcode in its first entry. Multiplies this for every .NET Framework application that might be used within an environment and the results of those scans might be easily overlooked.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/pesieve-legit-scan.png">

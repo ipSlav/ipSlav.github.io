@@ -109,7 +109,11 @@ Despite being both a very clever solution to execute some unmanaged code in .NET
 
 This is mainly due to the following two issues that I have encountered while playing around with it:
 
-1. Despite the similarities between CoreCLR and the .NET Framework, `NautilusProject` has been mainly tested in `NET 5.0`. As we’re interested on having a DLL PoC for `App Domain Manager Injection` we can solely rely on the .NET Framework, as the [AppDomainManager](https://learn.microsoft.com/en-us/dotnet/api/system.appdomainmanager?view=netframework-4.8.1) class is not supported by any other .NET platform/version. Moreover, the hijack process targets some internal .NET structures, which is not ideal as those might, and have been, modified over time; Therefore, we might get unreliable results and/or crashes while using it in different platforms and versions. Fortunately enough, we can still use the [Read](https://gist.github.com/xpn/1ebb297ff364d28df048db4db4236258#file-readgadget-cs) and [Write](https://gist.github.com/xpn/ebd9497cb47be7e3828458a21a1636c3#file-writegadget-cs) gadgets along the [CopyMemory](https://gist.github.com/xpn/8486cea3e3f7d41c8a6db6d0baa5960a#file-dogfoodexec-cs-L44) wrapper function to avoid calling Windows API when trying to read/write process memory.
+1. Despite the similarities between CoreCLR and the .NET Framework, `NautilusProject` has been mainly tested in `NET 5.0`. As we’re interested on having a DLL PoC for `App Domain Manager Injection` we can solely rely on the .NET Framework, as the [AppDomainManager](https://learn.microsoft.com/en-us/dotnet/api/system.appdomainmanager?view=netframework-4.8.1) class is not supported by any other .NET platform/version. Moreover, the hijack process targets some internal .NET structures, which is not ideal as those might, and have been, modified over time; Therefore, we might get unreliable results and/or crashes while using it in different platforms and versions. Fortunately enough, we can still use the [Read](https://gist.github.com/xpn/1ebb297ff364d28df048db4db4236258#file-readgadget-cs) and [Write](https://gist.github.com/xpn/ebd9497cb47be7e3828458a21a1636c3#file-writegadget-cs) gadgets along the [CopyMemory](https://gist.github.com/xpn/8486cea3e3f7d41c8a6db6d0baa5960a#file-dogfoodexec-cs-L44) wrapper function to avoid directly calling any Windows API when trying to read/write process memory.
+
+{: .box-note}
+Even though, for the sake of simplicity, I decided to reuse xpn `NautilusProject` gadgets it might be possible to abuse a different set of those, considering the amount present within [ecalllist.h](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/ecalllist.h).
+   
 2. Even if xpn came out [with a solution](https://github.com/xpn/NautilusProject/blob/master/NautilusProject/ExecStubOverwriteWithoutPInvoke.cs) to use `VirtualAlloc` without any P/Invoke reference we don’t want to directly call any type of Windows API, especially if related to memory allocation routines. This is mainly due to two reasons: to better blend-in within the legitimate behavior of backdoored .NET Framework applications, which might not use any unmanaged API at all in the first place, and to let the CLR allocate the memory using its default behavior, hiding from memory scanners and avoid being caught from a memory IoC perspective, as explained by forrest-orr. By looking at `Figure 2` we can also see another IoC derived from using memory allocated with `VirtualAlloc`: 3 unbacked memory region at the beginning of the thread call stack while executing a `MessageBox` shellcode.
 
 ![](/assets/img/let-me-manage-your-appdomain/nautilus-callstack.png)
@@ -151,13 +155,13 @@ Analyzing `EEHeapAllocInProcessHeap` code clearly shows how the method calls [Ge
 If you’re into the Windows API you have already noticed that something doesn’t sum up: `HeapAlloc` doesn’t set any memory protection flag. Therefore, this analysis doesn’t solve our question on why the returned buffer appears to be RWX. On the other hand, if we monitor `RtlCreateHeap` and `NtAllocateVirtualMemory` API calls under API Monitor, as in `Figure 5` and `Figure 6`, we can notice how an `HeapCreate` call with RWX flags is done during the Garbage Collector initialization process (notice how we reached just the 45th API call). Once we moving on with process execution (notice the 47th API call) a memory address within the same memory page is returned in the `delegatetest` console output, as visible in `Figure 7`.  I didn’t quite understand why the CLR decides to allocate RWX memory region on the defaulf process heap, shattering the default OS behavior which normally allocates just RW memory within it, but I suppose all of this might happen be due to some optimization process within the CLR logic. As I’m not sure about this I hope someone with much more expertise than me on the CLR internals might provide a better explanation of this weird behavior.
 
 ![](/assets/img/let-me-manage-your-appdomain/rtlcreateheap-rwx.png)
-Figure 5 - `RtlCreateHeap` with RWX flag
+*Figure 5 - `RtlCreateHeap` with RWX flag*
 
 ![](/assets/img/let-me-manage-your-appdomain/rtlcreateheap-gcinitialize.png)
-Figure 6 - `RtlCreateHeap` happening during `GC_Initialize`
+*Figure 6 - `RtlCreateHeap` happening during `GC_Initialize`*
 
 ![](/assets/img/let-me-manage-your-appdomain/delegatetest-rwxalloc.png)
-Figure 7 - Memory address within the same RWX Heap memory page
+*Figure 7 - Memory address within the same RWX Heap memory page*
 
 To execute a `MessageBox` shellcode using the RWX buffer returned by `GetFunctionPointerForDelegate` we can use a concept that I named, without too much imagination, `Double Delegate`: wrapping our function pointer with another delegate right after overwriting its memory.
 
@@ -224,10 +228,10 @@ Keep in mind that using `DirtyCLR` to execute a C2 shellcode might get you detec
 
 
 ![](/assets/img/let-me-manage-your-appdomain/backdoored-rdcman.png)
-Figure 11 - `RDCMan.exe` backdoored with `DirtyCLR`
+*Figure 11 - `RDCMan.exe` backdoored with `DirtyCLR`*
 
 ![](/assets/img/let-me-manage-your-appdomain/dirtyclr-messagebox.png)
-Figure 12 - `DirtyCLR` MessageBox shellcode execution with Clean Thread Call Stack
+*Figure 12 - `DirtyCLR` MessageBox shellcode execution with Clean Thread Call Stack*
 
 Let’s also see how `DirtyCLR` behaves against `Moneta`, `PE-sieve` and a top-tier EDR.
 

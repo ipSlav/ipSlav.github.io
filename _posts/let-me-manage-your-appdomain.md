@@ -90,8 +90,11 @@ If you’re familiar with dynamically allocated memory you should know that thos
 
 An example of this behavior can be seen in `Figure 1` while scanning a benign .NET Framework application with [Moneta](https://github.com/forrest-orr/moneta), returning a lot of memory IoC including, among others, several `abnormal private exutable memory regions`. As specified by Forrest all of those IoC are in fact False-Positives generate by the `Common Language Runtime (CLR)`, which tends to allocate big chunks of `RWX` memory regions both during its initialization phase and on runtime. To filters out all of those IoC Forrest implemented the `clr-heap` and `clr-prvx` flags, which you can see in action on the bottom part of the same image, showing no memory IoC on the same benign `SimpleDotNet.exe` application.
 
-![](/assets/img/let-me-manage-your-appdomain/moneta-benign.png)
-*Figure 1 - Running `Moneta` on a begning .NET Framework application with and without filters*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/moneta-benign.png">
+	<br>
+    <em>Figure 1 - Running Moneta on a begning .NET Framework application with and without filters</em>
+</p>
 
 Another great example of how difficult appears to obtain actual True-Positives while scanning .NET applications can be found also in [PE-sieve](https://github.com/hasherezade/pe-sieve). Despite its greater capabilities on identifying suspicious behaviors thanks to its shellcode and thread call stack analysis, as we’ll see later in this blogpost, `PE-sieve` also tends to reports a [significant amount of False-Positives](https://github.com/hasherezade/pe-sieve/wiki/1.-FAQ#pe-sieve-gives-me-a-lot-of-false-positives-why) or ignores .NET modules on some scanning capabilities, such as [headers scanning](https://github.com/hasherezade/pe-sieve/blob/master/scanners/headers_scanner.cpp#L64).
 
@@ -116,8 +119,11 @@ Even though, for the sake of simplicity, I decided to reuse xpn `NautilusProject
    
 2. Even if xpn came out [with a solution](https://github.com/xpn/NautilusProject/blob/master/NautilusProject/ExecStubOverwriteWithoutPInvoke.cs) to use `VirtualAlloc` without any P/Invoke reference we don’t want to directly call any type of Windows API, especially if related to memory allocation routines. This is mainly due to two reasons: to better blend-in within the legitimate behavior of backdoored .NET Framework applications, which might not use any unmanaged API at all in the first place, and to let the CLR allocate the memory using its default behavior, hiding from memory scanners and avoid being caught from a memory IoC perspective, as explained by forrest-orr. By looking at `Figure 2` we can also see another IoC derived from using memory allocated with `VirtualAlloc`: 3 unbacked memory region at the beginning of the thread call stack while executing a `MessageBox` shellcode.
 
-![](/assets/img/let-me-manage-your-appdomain/nautilus-callstack.png)
-*Figure 2 - Unbacked Memory Region on `NautilusProject` Thread Call Stack*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/nautilus-callstack.png">
+	<br>
+    <em>Figure 2 - Unbacked Memory Region on NautilusProject Thread Call Stack</em>
+</p>
 
 ## Double Delegate: Solving the JIT Hijack Problem
 While thinking about how to solve all those problems, luckily enough, I stumbled upon [this tweet](https://twitter.com/daem0nc0re/status/1698308879325766060) by @daem0nc0re showing that a buffer returned by [Marshal.GetFunctionPointerForDelegate](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.marshal.getfunctionpointerfordelegate?view=net-7.0) has `RWX` protection. To better understand why this is happening under the hood I started diving within a GitHub [CoreCLR codebase fork](https://github.com/dotnet/coreclr/forks), starting from the [function definition within the CLR](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/marshalnative.cpp#L408). As trying to make sense on all of it just by doing some easy and fast code review didn’t brought me any results, and led me to some [very weird disclaimers](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/inc/loaderheap.h#L162) written by developers, I decided to build a quick PoC called `delegatetest` and debug it with Windbg.
@@ -144,24 +150,39 @@ namespace DelegateTest
 
 By looking at the thread call stack in `Figure 3` we can have a clue on what is happening under the hood and observe how `GetFunctionPointerForDelegateInternal` will call  [EEHeapAllocInProcessHeap](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/hosting.cpp#L239).
 
-![](/assets/img/let-me-manage-your-appdomain/delegatetest-callstack.png)
-*Figure 3 - `delegatetest.exe` Thread Call Stack*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/delegatetest-callstack.png">
+	<br>
+    <em>Figure 3 - delegatetest.exe Thread Call Stack</em>
+</p>
 
 Analyzing `EEHeapAllocInProcessHeap` code clearly shows how the method calls [GetProcessHeap](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/hosting.cpp#L143) to get an handle to the `Default Process Heap`, a 1MB heap memory region allocated by the OS during a process initialization, and then allocates some memory via [HeapAlloc](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/hosting.cpp#L221). Another evidence of default process heap usage can be seen in `Figure 4` while analyzing the `delegatetest` process memory with [VMMap](https://learn.microsoft.com/bs-latn-ba/sysinternals/downloads/vmmap), observing a 8KB RWX buffer in Heap ID 0, the `Default Process Heap`.
 
-![](/assets/img/let-me-manage-your-appdomain/delegatetest-vmmap.png)
-*Figure 4 - `delegatetest.exe` Default Process Heap allocation*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/delegatetest-vmmap.png">
+	<br>
+    <em>Figure 4 - delegatetest.exe Default Process Heap allocation</em>
+</p>
 
 If you’re into the Windows API you have already noticed that something doesn’t sum up: `HeapAlloc` doesn’t set any memory protection flag. Therefore, this analysis doesn’t solve our question on why the returned buffer appears to be RWX. On the other hand, if we monitor `RtlCreateHeap` and `NtAllocateVirtualMemory` API calls under API Monitor, as in `Figure 5` and `Figure 6`, we can notice how an `HeapCreate` call with RWX flags is done during the Garbage Collector initialization process (notice how we reached just the 45th API call). Once we moving on with process execution (notice the 47th API call) a memory address within the same memory page is returned in the `delegatetest` console output, as visible in `Figure 7`.  I didn’t quite understand why the CLR decides to allocate RWX memory region on the defaulf process heap, shattering the default OS behavior which normally allocates just RW memory within it, but I suppose all of this might happen be due to some optimization process within the CLR logic. As I’m not sure about this I hope someone with much more expertise than me on the CLR internals might provide a better explanation of this weird behavior.
 
-![](/assets/img/let-me-manage-your-appdomain/rtlcreateheap-rwx.png)
-*Figure 5 - `RtlCreateHeap` with RWX flag*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/rtlcreateheap-rwx.png">
+	<br>
+    <em>Figure 5 - RtlCreateHeap with RWX flag</em>
+</p>
 
-![](/assets/img/let-me-manage-your-appdomain/rtlcreateheap-gcinitialize.png)
-*Figure 6 - `RtlCreateHeap` happening during `GC_Initialize`*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/rtlcreateheap-gcinitialize.png">
+	<br>
+    <em>Figure 6 - RtlCreateHeap happening during GC_Initialize</em>
+</p>
 
-![](/assets/img/let-me-manage-your-appdomain/delegatetest-rwxalloc.png)
-*Figure 7 - Memory address within the same RWX Heap memory page*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/delegatetest-rwxalloc.png">
+	<br>
+    <em>Figure 7 - Memory address within the same RWX Heap memory page</em>
+</p>
 
 To execute a `MessageBox` shellcode using the RWX buffer returned by `GetFunctionPointerForDelegate` we can use a concept that I named, without too much imagination, `Double Delegate`: wrapping our function pointer with another delegate right after overwriting its memory.
 
@@ -209,16 +230,25 @@ Mindful of the CLR memory allocation behavior observed during the `GetFunctionPo
 
 If we look at `Figure 8` we can see a thread call stack containing three interesting frame indexes showing us how the CLR, during the `DefaultDomain` initialization process, creates a [CodeHeap](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/vm/codeman.h#L409) , calls [ClrVirtualAllocExecutable](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/util.cpp#L458) and ends up calling `NtAllocateVirtualMemory`, returning the address `0x7FFEB33E0000` in little endian.
 
-![](/assets/img/let-me-manage-your-appdomain/defaultdomain-rwxalloc.png)
-*Figure 8 - RWX memory allocation during the `DefaultDomain` initialization process*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/defaultdomain-rwxalloc.png">
+	<br>
+    <em>Figure 8 - RWX memory allocation during the DefaultDomain initialization process</em>
+</p>
 
 Moving on with process execution, and reaching the `PrepareMethod` stage, we can see in `Figure 9` how the CLR will retrieve the size of the inflated dynamically compiled method via [emitEndCodeGen](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/jit/emit.cpp#L4473), and then allocates more executable memory for the new method through [GetMoreCommitedPages](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/loaderheap.cpp#L1205), returning the address `0x7FFEB33E1000` . Reaching the process execution end we can see in `Figure 10`  the `GenerateRWXMemory` function returning the memory address `0x7FFEB33E0C50`, which in fact resides within the first memory page allocated by the CLR during the `DefaultDomain` initialization proces and will require more pages to be able to live in memory. This basically confirmed my suspucious about the CLR behaving similarly as during the `GetFunctionPointerForDelegate` function execution.
 
-![](/assets/img/let-me-manage-your-appdomain/preparemethod-rwxalloc.png)
-*Figure 9 - Allocating more memory page on the RWX memory region during `PrepareMethod` execution*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/preparemethod-rwxalloc.png">
+	<br>
+    <em>Figure 9 - Allocating more memory page on the RWX memory region during PrepareMethod execution</em>
+</p>
 
-![](/assets/img/let-me-manage-your-appdomain/generaterwxmemory-address.png)
-*Figure 10 - Memory address returned after the `GenerateRWXMemory` function execution*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/generaterwxmemory-address.png">
+	<br>
+    <em>Figure 10 - Memory address returned after the GenerateRWXMemory function execution</em>
+</p>
 
 ## DirtyCLR: Blend Within the .NET Framework and Live Free
 Now that we have every piece of the puzzle we can put everything together and have **DirtyCLR(LINK)** bypass blend-in within the .NET Framework. `Figure 11` and `Figure 12` shows us a shellcode execution clean thread call stack of a backdoored [RDCMan](https://learn.microsoft.com/en-us/sysinternals/downloads/rdcman) inspected with `System Informer` (former `Process Hacker`).
@@ -226,40 +256,62 @@ Now that we have every piece of the puzzle we can put everything together and ha
 {: .box-note}
 Keep in mind that using `DirtyCLR` to execute a C2 shellcode might get you detected if your beacon Reflective Loader doesn’t take care of its own OPSEC, creating new identifiable IoCs.
 
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/backdoored-rdcman.png">
+	<br>
+    <em>Figure 11 - RDCMan.exe backdoored with DirtyCLR</em>
+</p>
 
-![](/assets/img/let-me-manage-your-appdomain/backdoored-rdcman.png)
-*Figure 11 - `RDCMan.exe` backdoored with `DirtyCLR`*
-
-![](/assets/img/let-me-manage-your-appdomain/dirtyclr-messagebox.png)
-*Figure 12 - `DirtyCLR` MessageBox shellcode execution with Clean Thread Call Stack*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/dirtyclr-messagebox.png">
+	<br>
+    <em>Figure 12 - DirtyCLR MessageBox shellcode execution with Clean Thread Call Stack</em>
+</p>
 
 Let’s also see how `DirtyCLR` behaves against `Moneta`, `PE-sieve` and a top-tier EDR.
 
 ### Moneta
 `Figure 13` shows us no IoCs, setting up the anti-false-positive CLR filters, from the backdoored application. This is common behavior shared with a lot of .NET application but still allows us to perfectly blend-in within the CLR.
 
-![](/assets/img/let-me-manage-your-appdomain/dirtyclr-moneta.png)
-*Figure 13 - No entries while scanning a backdoored `RDCMan.exe` with `Moneta`*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/dirtyclr-moneta.png">
+	<br>
+    <em>Figure 13 - No entries while scanning a backdoored RDCMan.exe with Moneta</em>
+</p>
 
 ### PE-sieve
 Even though `PE-sieve` is capable of identifying suspicious behaviors, getting actionable response from a appears to be tricky and prone to errors, especially without a proper baseline of false-positives generate by non-backdoored, legitimate .NET Framework applications.
 
 To better articulate this lets have a look at `Figure 14` showing us 2 `Total suspicious` entries from a non-backdoored RDCMan and compares it with `Figure 15` containing a total of 4 entries. Even though we get two new entries, one being the actual `MessageBox` shellcode, a blue teamer might not further investigating the entries, considering the amount of false-positive generated by default by the CLR.
 
-![](/assets/img/let-me-manage-your-appdomain/pesieve-legit.png)
-*Figure 14 - `PE-sieve` scan on legitimate `RDCMan.exe` execution*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/pesieve-legit.png">
+	<br>
+    <em>Figure 14 - PE-sieve scan on legitimate RDCMan.exe execution</em>
+</p>
 
-![](/assets/img/let-me-manage-your-appdomain/pesieve-backdoored.png)
-*Figure 15 - `PE-sieve` scan on backdoored `RDCMan.exe` execution*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/pesieve-backdoored.png">
+	<br>
+    <em>Figure 15 - PE-sieve scan on backdoored RDCMan.exe execution</em>
+</p>
 
 If we have a look at the `PE-sieve` scan reports we can see it might become pretty hard to distinguish between the legitimate execution, in `Figure 16`, from the backdoored present in `Figure 17` containing the first entry, being the actual `MessageBox` shellcode. Multiplies this for every .NET Framework application that might be used within an environment and the results of those scans might be easily overlooked.
 
-![](/assets/img/let-me-manage-your-appdomain/pesieve-legit-scan.png)
-*Figure 16 - `PE-sieve` scan report on legitimate `RDCMan.exe` execution*
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/pesieve-legit-scan.png">
+	<br>
+    <em>Figure 16 - PE-sieve scan report on legitimate RDCMan.exe execution</em>
+</p>
 
-![](/assets/img/let-me-manage-your-appdomain/pesieve-backdoored-scan.png)
-*Figure 17 - `PE-sieve` scan report on backdoored `RDCMan.exe` execution*
+
+<p align="center" width="100%">
+    <img src="/assets/img/let-me-manage-your-appdomain/pesieve-backdoored-scan.png">
+	<br>
+    <em>Figure 17 - PE-sieve scan report on backdoored RDCMan.exe execution</em>
+</p>
 
 ### PoC || GTFO
 To easily see how `DirtyCLR` behaves against a top-tier EDR let's compare it with a vanilla .NET shellcode loader using P/Invoke and a classic `VirtualAlloc > WriteProcessMemory > CreateThread` function execution flow.
+
 ![](/assets/img/let-me-manage-your-appdomain/dirtyclr-edr.gif)

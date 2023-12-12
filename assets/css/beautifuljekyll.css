@@ -54,7 +54,7 @@ h1 {
   -webkit-text-fill-color: transparent;
 }
 h2 {
-  font-size: 1.875rem;
+  margin-bottom: -10px;
 }
 h3 {
   font-size: 1.5rem;

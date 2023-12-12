@@ -35,10 +35,10 @@ public sealed class MyAppDomain : AppDomainManager
 ```
 
 The two main value that we’re most interested in are the `MyAppDomain` extended class and the C# filename (e.g. `AppDomInject.cs`) as those values will be respectively used as `appDomainManagerType` and `appDomainManagerAssembly` in our trigger methods.
-
-To elicit our target .NET Framework application to load our arbitrary managed DLL we can abuse two main trigger methods:
+Talking about trigger methods to elicit our target .NET Framework application to load our arbitrary managed DLL we can abuse two of those:
 - Using a `.config` XLM file
 - Setting up some enviromental variables
+
 The first method, as long we have write privileges over the file or folder, allows us to (over)write a `.config` file placed in the same folder on which the application resides. For example if we want to target an application called `DemoApp.exe` located in `C:\Temp` we should write or modify a `DemoApp.exe.config` file placed in the same application folder.
 
 {: .box-note}
@@ -97,6 +97,7 @@ An example of this behavior can be seen in `Figure 1` while scanning a benign .N
 	<br>
     <em>Figure 1 - Running Moneta on a begning .NET Framework application with and without filters</em>
 </p>
+
 Another great example of how difficult appears to obtain actual True-Positives while scanning .NET applications can be found also in [PE-sieve](https://github.com/hasherezade/pe-sieve). Despite its greater capabilities on identifying suspicious behaviors thanks to its shellcode and thread call stack analysis, as we’ll see later in this blogpost, `PE-sieve` also tends to reports a [significant amount of False-Positives](https://github.com/hasherezade/pe-sieve/wiki/1.-FAQ#pe-sieve-gives-me-a-lot-of-false-positives-why) or ignores .NET modules on some scanning capabilities, such as [headers scanning](https://github.com/hasherezade/pe-sieve/blob/master/scanners/headers_scanner.cpp#L64).
 
 ## Using Unsafe Gadgets
@@ -105,6 +106,7 @@ As we’re interested on building up a managed DLL that flies under the radar we
 To partially solve the first problem we can leverage an old research called [Weird Ways to Run Unmanaged Code in .NET](https://blog.xpnsec.com/weird-ways-to-execute-dotnet/), written by Adam Chester ([@xpn](https://twitter.com/_xpn_)). By looking at [NautilusProject](https://github.com/xpn/NautilusProject) and his blogpost we can identify two very interesting and uncommon ways of leveraging .NET to offensive purposes:
 - Hijacking JIT Compilation
 - Using InternalCall and QCall gadgets
+
 Despite being both a very clever solution to execute some unmanaged code in .NET, we can’t just implement an Unmanaged DLL for App Domain Manager Injection using `NautilusProject` as-is. 
 This is mainly due to the following two issues that I have encountered while playing around with it:
 
@@ -218,7 +220,7 @@ namespace DelegateTest
 ```
 
 ## EmitAlloc: Solving the VirtualAlloc Problem
-So, how do we avoid to directly call `VirtualAlloc` and solve our second and last problem? Well, If we look again at @daem0nc0re tweet [Dylan Tran](https://twitter.com/d_tranman) provides us [a very clever solution](https://gist.github.com/susMdT/2d13330f6a5bfa482555e22430c0eb82) for this, using the .NET [System.Reflection.Emit](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.emit?view=net-7.0) APIs to allocate an arbitrary amount of memory.
+So, how do we avoid to directly call `VirtualAlloc` and solve our second and last problem? Well, If we look again at @daem0nc0re tweet, [Dylan Tran](https://twitter.com/d_tranman) provides us [a very clever solution](https://gist.github.com/susMdT/2d13330f6a5bfa482555e22430c0eb82) for this, using the .NET [System.Reflection.Emit](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.emit?view=net-7.0) APIs to allocate an arbitrary amount of memory.
 
 By looking at Dylan PoC we can see how this allows us to allocate an arbitrary amount of memory by repeateadly calling the [EmitWriteLine](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.emit.ilgenerator.emitwriteline?view=net-7.0) method iterating over a byte count and subtracting 18 bytes from it at every cycle.  This gives us a clue that, under the hood, what is happening is that the size of the dynamically generated method gets inflated by 18 bytes on every `EmitWriteLine` method call, leading the CLR to allocate all the needed memory for the method once [PrepareMethod](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.runtimehelpers.preparemethod?view=net-8.0) gets called.
 As I wanted to verify this and understand how this solution works under the hood, and be sure if I could actually use it within DirtyCLR, I compiled Dylan’s PoC and dive right into Windbg once again.
@@ -232,7 +234,7 @@ If we look at `Figure 8` we can see a thread call stack containing three interes
     <em>Figure 8 - RWX memory allocation during the DefaultDomain initialization process</em>
 </p>
 
-Moving on with process execution, and reaching the `PrepareMethod` stage, we can see in `Figure 9` how the CLR will retrieve the size of the inflated dynamically compiled method via [emitEndCodeGen](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/jit/emit.cpp#L4473), and then allocates more executable memory for the new method through [GetMoreCommitedPages](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/loaderheap.cpp#L1205), returning the address `0x7FFEB33E1000` . Reaching the process execution end we can see in `Figure 10`  the `GenerateRWXMemory` function returning the memory address `0x7FFEB33E0C50`, which in fact resides within the first memory page allocated by the CLR during the `DefaultDomain` initialization proces and will require more pages to be able to live in memory. This basically confirmed my suspucious about the CLR behaving similarly as during the `GetFunctionPointerForDelegate` function execution.
+Moving on with process execution, and reaching the `PrepareMethod` stage, we can see in `Figure 9` how the CLR will retrieve the size of the inflated dynamically compiled method via [emitEndCodeGen](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/jit/emit.cpp#L4473), and then allocates more executable memory for the new method through [GetMoreCommitedPages](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/loaderheap.cpp#L1205), returning the address `0x7FFEB33E1000`.<br>Reaching the end of process execution we can see in `Figure 10` the `GenerateRWXMemory` function returning the memory address `0x7FFEB33E0C50`, which in fact resides within the first memory page allocated by the CLR during the `DefaultDomain` initialization proces and will require more pages to be able to live in memory. This basically confirmed my suspucious about the CLR behaving similarly as during the `GetFunctionPointerForDelegate` function execution.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/preparemethod-rwxalloc.png">

@@ -247,7 +247,7 @@ Moving on with process execution, and reaching the `PrepareMethod` stage, we can
 </p>
 
 ## DirtyCLR: Blend Within the .NET Framework and Live Free
-Now that we have every piece of the puzzle we can put everything together and have **DirtyCLR(LINK)** bypass blend-in within the .NET Framework. `Figure 11` and `Figure 12` shows us a shellcode execution clean thread call stack of a backdoored [RDCMan](https://learn.microsoft.com/en-us/sysinternals/downloads/rdcman) inspected with `System Informer` (former `Process Hacker`).
+Now that we have every piece of the puzzle we can put everything together and have [DirtyCLR](https://github.com/ipSlav/DirtyCLR) blend-in within the .NET Framework. `Figure 11` and `Figure 12` shows us a shellcode execution clean thread call stack of a backdoored [RDCMan](https://learn.microsoft.com/en-us/sysinternals/downloads/rdcman) inspected with `System Informer` (former `Process Hacker`).
 
 {: .box-note}
 Keep in mind that using `DirtyCLR` to execute a C2 shellcode might get you detected if your beacon Reflective Loader doesn’t take care of its own OPSEC, creating new identifiable IoCs.

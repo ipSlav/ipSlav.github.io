@@ -643,9 +643,9 @@ footer .footer-custom-content {
   font-style: italic;
   color: {{ site.text-col | default: "#404040" }};
   text-decoration: none;
-  padding: 0 0.3125rem;
+  padding: 0 0.2rem;
   opacity: 0.8;
-  border: 1px solid transparent;
+  /*border: 1px solid transparent;*/
   border-radius: 0.1875rem;
 }
 
@@ -910,7 +910,7 @@ code {
   color: #FF4747;
   background-color: #EEE;
   border-radius: 0.25rem;
-  font-size: 80%;
+  font-size: 75%;
 }
 
 pre code {

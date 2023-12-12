@@ -16,9 +16,9 @@ By leveraging some other previous research and PoCs and standing on the shoulder
 To backdoor .NET Framework applications we’re going to abuse a very well-known technique: `App Domain Manager Injection`.
 This technique, initially discovered by Casey Smith (aka subTee) in 2017, allows to inject a custom ApplicationDomain that will execute arbitrary code inside the target application process.
 Despite his original PoC, called GhostLoader, has been deleted you can still find it in GitHub thanks to a fork published by [TheWover](https://github.com/TheWover/GhostLoader).
-Without having to dive too much into the details (if you’ve never heard of such technique go check out [NetbiosX](https://pentestlaboratories.com/2020/05/26/appdomainmanager-injection-and-detection/) and [Rapid7](https://www.rapid7.com/blog/post/2023/05/05/appdomain-manager-injection-new-techniques-for-red-teams/) blogposts), what we are interested in is the possibility to trigger any .NET Framework application to load an arbirary managed DLL located on disk or remotely in a website.
+Without having to dive too much into the details (if you’ve never heard of such technique go check out [NetbiosX](https://pentestlaboratories.com/2020/05/26/appdomainmanager-injection-and-detection/) and [Rapid7](https://www.rapid7.com/blog/post/2023/05/05/appdomain-manager-injection-new-techniques-for-red-teams/) blogposts), what we are interested in is the possibility to trigger any .NET Framework application to load an arbitrary managed DLL located on disk or remotely in a website.
 
-An extremely simplified DLL to be used as a PoC could be write as follows:
+An extremely simplified DLL to be used as a PoC could be written as follows:
 
 ```csharp
 using System;
@@ -34,7 +34,7 @@ public sealed class MyAppDomain : AppDomainManager
 }
 ```
 
-The two main value that we’re most interested in are the `MyAppDomain` extended class and the C# filename (e.g. `AppDomInject.cs`) as those values will be respectively used as `appDomainManagerType` and `appDomainManagerAssembly` in our trigger methods.
+The two main values that we’re most interested in are the `MyAppDomain` extended class and the C# filename (e.g. `AppDomInject.cs`) as those values will be respectively used as `appDomainManagerType` and `appDomainManagerAssembly` in our trigger methods.
 Talking about trigger methods to elicit our target .NET Framework application to load our arbitrary managed DLL we can abuse two of those:
 - Using a `.config` XLM file
 - Setting up some enviromental variables
@@ -234,7 +234,7 @@ If we look at `Figure 8` we can see a thread call stack containing three interes
     <em>Figure 8 - RWX memory allocation during the DefaultDomain initialization process</em>
 </p>
 
-Moving on with process execution, and reaching the `PrepareMethod` stage, we can see in `Figure 9` how the CLR will retrieve the size of the inflated dynamically compiled method via [emitEndCodeGen](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/jit/emit.cpp#L4473), and then allocates more executable memory for the new method through [GetMoreCommitedPages](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/loaderheap.cpp#L1205), returning the address `0x7FFEB33E1000`.<br>Reaching the end of process execution we can see in `Figure 10` the `GenerateRWXMemory` function returning the memory address `0x7FFEB33E0C50`, which in fact resides within the first memory page allocated by the CLR during the `DefaultDomain` initialization proces and will require more pages to be able to live in memory. This basically confirmed my suspucious about the CLR behaving similarly as during the `GetFunctionPointerForDelegate` function execution.
+Moving on with process execution, and reaching the `PrepareMethod` stage, we can see in `Figure 9` how the CLR will retrieve the size of the inflated dynamically compiled method via [emitEndCodeGen](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/jit/emit.cpp#L4473), and then allocates more executable memory for the new method through [GetMoreCommitedPages](https://github.com/wtgodbe/coreclr/blob/7fe3cc73d1ee4bbe81b2a5e8a62667b78a02f7ae/src/utilcode/loaderheap.cpp#L1205), returning the address `0x7FFEB33E1000`.<br>Reaching the end of process execution we can see in `Figure 10` the `GenerateRWXMemory` function returning the memory address `0x7FFEB33E0C50`, which in fact resides within the first memory page allocated by the CLR during the `DefaultDomain` initialization process and will require more pages to be able to live in memory. This basically confirmed my suspicious about the CLR behaving similarly as during the `GetFunctionPointerForDelegate` function execution.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/preparemethod-rwxalloc.png">

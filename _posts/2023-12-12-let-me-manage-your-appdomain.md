@@ -104,7 +104,7 @@ To partially solve the first problem we can leverage an old research called [Wei
 - Hijacking JIT Compilation
 - Using InternalCall and QCall gadgets
 
-Despite being both a very clever solution to execute some unmanaged code in .NET, we can’t just implement an Unmanaged DLL for `App Domain Manager Injection` using `NautilusProject` as-is. 
+Despite being both a very clever solution to execute some unmanaged code in .NET, we can’t just implement a managed DLL for `App Domain Manager Injection` using `NautilusProject` as-is. 
 This is mainly due to the following two issues that I have encountered while playing around with it:
 
 1. Despite the similarities between CoreCLR and the .NET Framework, `NautilusProject` has been mainly tested in `NET 5.0`. As we’re interested on having a DLL PoC for `App Domain Manager Injection` we can solely rely on the .NET Framework, as the [AppDomainManager](https://learn.microsoft.com/en-us/dotnet/api/system.appdomainmanager?view=netframework-4.8.1) class is not supported by any other .NET platform/version. Moreover, the hijack process targets some internal .NET structures, which is not ideal as those might, and have been, modified over time; Therefore, we might get unreliable results and/or crashes while using it in different platforms and versions. Fortunately enough, we can still use the [Read](https://gist.github.com/xpn/1ebb297ff364d28df048db4db4236258#file-readgadget-cs) and [Write](https://gist.github.com/xpn/ebd9497cb47be7e3828458a21a1636c3#file-writegadget-cs) gadgets along the [CopyMemory](https://gist.github.com/xpn/8486cea3e3f7d41c8a6db6d0baa5960a#file-dogfoodexec-cs-L44) wrapper function to avoid directly calling any Windows API when trying to read/write process memory.

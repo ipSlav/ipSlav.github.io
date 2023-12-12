@@ -909,6 +909,7 @@ code {
   color: #FF4747;
   background-color: #EEE;
   border-radius: 0.25rem;
+  font-size: 80%;
 }
 
 pre code {

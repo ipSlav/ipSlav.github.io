@@ -6,7 +6,6 @@ subtitle: I'm just a guy obsessed with understanding how things work
 
 My name is **Petar Jr. Pranic** and I am a red team guy currently working as a Red Team Manager in [Shielder](https://www.shielder.com) leading a small team dedicated to Offensive Operations activities.
 Throughout my experience in the offensive security field, **I have participated in and managed more than 100 engagements** targeting mid and large enterprises spanning several industries.<br>
-
 Outside my day to day job responsibilities, my primary interest lies in **researching, analyzing and detecting adversary tradecrafts and techniques**, with a focus on Microsoft products, trying to understand how things work internally and make a sense on what is happening under the hood of our digital world.  
 
 ## Certified

@@ -29,7 +29,7 @@ body {
   grid-template-rows: 1fr auto;
 }
 em {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 p {
   line-height: 1.5;

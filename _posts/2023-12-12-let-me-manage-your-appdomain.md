@@ -6,6 +6,11 @@ cover-img: /assets/img/let-me-manage-your-appdomain/logo.jpg
 tags: [red teaming, security research]
 ---
 
+{: .box-note}
+This research has been possibile with the support of [Shielder](https://www.shielder.com/) who has sponsored this research with the goal to discover new ways of blend-in within legitimate applications and raise awerness about uncovered sophisticated attack venues, contributing to the security of the digital ecosystem.
+Shielder invests from 25% to 100% of employees time into Security Research and R&D, whose output can be seen in its [advisories](https://www.shielder.com/advisories/) and [blog](https://www.shielder.com/blog/).
+If you like the type of research that is being published, and you would like to uncover unexplored attacks and vulnerabilities, do not hesitate to [reach out](info@shielder.com).
+
 ## Introduction
 As EDR are becoming more and more sophisticated and difficult to bypass, the opportunity to blend-in within legitimate application behavior appears to be an interesting vector to remain undetected.
 This research started a couple of years back during my initial days of trying to bypass EDRs (without really understanding how and why things were working in a certain way) after stumbling upon a [@MrUn1k0d3r](https://twitter.com/MrUn1k0d3r) episode on which he explained a really cool .NET appdomain trick.
@@ -87,7 +92,7 @@ To better understand what could be the main advantages of backdooring .NET Frame
 
 If you’re familiar with dynamically allocated memory you should know that those memory regions are normally allocated as `Read-Write (RW)` by modern Operating Systems. On the other hand, JIT processes tends to allocate and use a lot of dynamically allocated memory on the `Heap`, normally managed by `Garbage Collectors`, but with `Read-Write-Execute (RWX)` protection flags. This gives a great opportunity to attackers to blend-in within those process memory region space and potentially fly undetected by memory scanners, by masquerading themselves within False-Positives or even being filtered out by some of those.
 
-An example of this behavior can be seen in `Figure 1` while scanning a benign .NET Framework application with [Moneta](https://github.com/forrest-orr/moneta), returning a lot of memory IoC including, among others, several `abnormal private exutable memory regions`. As specified by Forrest all of those IoCs are in fact False-Positives generate by the `Common Language Runtime (CLR)`, which tends to allocate big chunks of `RWX` memory regions both during its initialization phase and on runtime. To filters out all of those IoCs Forrest implemented the `clr-heap` and `clr-prvx` flags, which you can see in action on the bottom part of the same image, showing no memory IoC on the same benign `SimpleDotNet.exe` application.
+An example of this behavior can be seen in `Figure 1` while scanning a benign .NET Framework application with [Moneta](https://github.com/forrest-orr/moneta), returning a lot of memory IoCs including, among others, several `abnormal private exutable memory regions`. As specified by Forrest all of those IoCs are in fact False-Positives generate by the `Common Language Runtime (CLR)`, which tends to allocate big chunks of `RWX` memory regions both during its initialization phase and on runtime. To filters out all of those IoCs Forrest implemented the `clr-heap` and `clr-prvx` flags, which you can see in action on the bottom part of the same image, showing no memory IoCs on the same benign `SimpleDotNet.exe` application.
 
 <p align="center" width="100%">
     <img src="/assets/img/let-me-manage-your-appdomain/moneta-benign.png">

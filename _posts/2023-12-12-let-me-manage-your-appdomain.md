@@ -12,7 +12,7 @@ Shielder invests from 25% to 100% of employees time into Security Research and R
 If you like the type of research that is being published, and you would like to uncover unexplored attacks and vulnerabilities, do not hesitate to [reach out](mailto:info@shielder.com).
 
 ## Introduction
-As EDR are becoming more and more sophisticated and difficult to bypass, the opportunity to blend-in within legitimate application behavior appears to be an interesting vector to remain undetected.
+As EDR solutions are becoming more and more sophisticated and difficult to bypass, the opportunity to blend-in within legitimate applications behavior appears to be an interesting vector to remain undetected.
 This research started a couple of years back during my initial days of trying to bypass EDRs (without really understanding how and why things were working in a certain way) after stumbling upon a [@MrUn1k0d3r](https://twitter.com/MrUn1k0d3r) episode on which he explained a really cool .NET appdomain trick.
 By leveraging some previous existing researches and PoCs and standing on the shoulder of giants I've come up with an extra cool fashion way to backdoor and abuse .NET Framework applications and created [DirtyCLR](https://github.com/ipSlav/DirtyCLR), a managed DLL on steroids that can execute a shellcode with a clean thread call stack and without directly calling any Windows API.
 

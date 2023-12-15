@@ -1,7 +1,7 @@
 ---
 layout: post
 title: Let Me Manage Your AppDomain
-subtitle: Abuse the CLR memory un(safety)
+subtitle: Abuse the CLR memory (un)safety
 cover-img: /assets/img/let-me-manage-your-appdomain/logo.jpg
 tags: [red teaming, security research]
 ---

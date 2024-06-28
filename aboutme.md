@@ -16,6 +16,7 @@ Outside my day to day job responsibilities, my primary interest lies in **resear
 - **eLearnSecurity:** [eCCPTv2](https://drive.google.com/file/d/1RcSxr-e3wnr4tX7mYYOeCxcQi94yThdH/view), [eJPT](https://drive.google.com/file/d/1vC4DP8abT-CJffV0VBeZ-7Tnef-s0hNm/view)
 
 ## Courses I've Attended
+- **OpenSecurityTraining2:** [Architecture 1001: x86-64 Assembly](https://p.ost2.fyi/certificates/01de0afcae124ea1b6d829190d5f67c2)
 - **Outsider Security:** [Offensive Azure AD And Hybrid AD Security](https://drive.google.com/file/d/1qebk-apOj3-QUuKKGgRafmyGs-5gLVSK/view)
 - **Mr.Un1k0d3r:** [Red Team Training](https://drive.google.com/file/d/1_OM_VyE1w2_i2eizUoXnHS-ROJN1FkRG/view)
 - **Sektor7 Institute:** [Malware Development Essentials](https://drive.google.com/file/d/1wWxDtkv3wqytcqOvPXBmQWyrafNVSb1w/view) and [Intermediate](https://drive.google.com/file/d/1o5Mw1qDAlzZFXz_v1TmNaz1-coELRVUa/view), [Windows Evasion](https://drive.google.com/file/d/1__TN5DXjTPDZyq7O0YHc5ZIHKK70UCGr/view), [Privilege Escalation](https://drive.google.com/file/d/1Q3cA-_X_tFXLbVhTu5oHojErDC8cwwjn/view), [Windows Persistence](https://drive.google.com/file/d/1YYKlCAxZDgSEi-LAojv4wiENSw2aEShH/view)
